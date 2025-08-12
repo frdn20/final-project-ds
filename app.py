@@ -5,8 +5,8 @@ import pickle
 import xgboost as xgb
 
 # Load model
-with open('XGboost_Model.pkl', 'rb') as file:
-    XGboost_Model = pickle.load(file)
+with open('XGBoost_Model.pkl', 'rb') as file:
+    XGBoost_Model = pickle.load(file)
 
 # booster = best_model_pipeline_model_xgb.get_booster()
 # booster.save_model("model.json")
@@ -168,3 +168,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
