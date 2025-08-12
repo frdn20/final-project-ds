@@ -1,129 +1,135 @@
 import streamlit as st
 import streamlit.components.v1 as stc
-import xgboost
 import pandas as pd
-import numpy as np
-import imblearn
-import cloudpickle
+import cloudpickle  # Gunakan cloudpickle jika model Anda kompleks
 
-with open("income_prediction_pipeline.pkl","rb") as f :
-  XGBoost_Model = cloudpickle.load(f)
+# ====================================================================
+# 1. MUAT PIPELINE, BUKAN HANYA MODEL
+# Pastikan Anda sudah menyimpan pipeline yang lengkap (preprocessor + model)
+# seperti yang kita diskusikan di jawaban sebelumnya.
+# ====================================================================
+try:
+    with open("income_prediction_pipeline.pkl", "rb") as f:
+        pipeline = cloudpickle.load(f)
+except FileNotFoundError:
+    st.error("Model pipeline 'income_prediction_pipeline_v2.pkl' tidak ditemukan. Pastikan file sudah ada di folder yang sama dengan app.py")
+    st.stop()
 
-html_temp = """<div style="background-color:#000;padding:10px;border-radius:10px">
-                <h1 style="color:#fff;text-align:center">Loan Eligibility Prediction App</h1> 
-                <h4 style="color:#fff;text-align:center">Made for: Credit Team</h4> 
-                """
 
-desc_temp = """ ### Income Category Prediction App 
-                This app is used by 
-                
-                #### Data Source
-                Kaggle: Link <Masukkan Link>
-                """
-
-def main():
-    stc.html(html_temp)
-    menu = ["Home", "Machine Learning App"]
-    choice = st.sidebar.selectbox("Menu", menu)
-
-    if choice == "Home":
-        st.subheader("Home")
-        st.markdown(desc_temp, unsafe_allow_html=True)
-    elif choice == "Machine Learning App":
-        run_ml_app()
-
+# Peta untuk mengubah nama tampilan pendidikan menjadi angka
 education_map = {
-    1: 'Preschool', 2: '1st-4th grade',3: '5th-6th grade', 4: '7th-8th grade', 5: '9th grade',
-    6: '10th grade',7: '11th grade',8: '12th grade',9: 'HS-grad',10: 'Some college',11: 'Assoc-acdm',
-    12: 'Assoc-voc', 13: 'Bachelors degree', 14: 'Masters degree', 15: 'Prof-school',16: 'Doctorate degree'}
-workclass = ['Federal-gov', 'Local-gov','Never-worked', 'Other', 'Private',
-             'Self-emp-inc', 'Self-emp-not-inc','State-gov', 'Without-pay']
-occupation = ['Adm-clerical','Armed-Forces', 'Craft-repair','Exec-managerial', 'Farming-fishing',
-              'Handlers-cleaners', 'Machine-op-inspct','Other-service', 'Priv-house-serv',
-              'Prof-specialty', 'Protective-serv','Sales', 'Tech-support','Transport-moving']
-relationship = ['Relationship_Not-in-family',
-       'Relationship_Other-relative', 'Relationship_Own-child',
-       'Relationship_Unmarried', 'Relationship_Wife']
+    'Preschool': 1, '1st-4th': 2, '5th-6th': 3, '7th-8th': 4, '9th': 5,
+    '10th': 6, '11th': 7, '12th': 8, 'HS-grad': 9, 'Some-college': 10,
+    'Assoc-acdm': 11, 'Assoc-voc': 12, 'Bachelors': 13, 'Masters': 14,
+    'Prof-school': 15, 'Doctorate': 16
+}
+
+# Daftar kategori untuk dropdown (ini sudah bagus dari kode Anda)
+workclass_options = ['Private', 'Self-emp-not-inc', 'Local-gov', 'State-gov', 'Self-emp-inc', 'Federal-gov', 'Without-pay', 'Never-worked', 'Other']
+occupation_options = ['Prof-specialty', 'Craft-repair', 'Exec-managerial', 'Adm-clerical', 'Sales', 'Other-service', 'Machine-op-inspct', 'Transport-moving', 'Handlers-cleaners', 'Farming-fishing', 'Tech-support', 'Protective-serv', 'Priv-house-serv', 'Armed-Forces']
+relationship_options = ['Not-in-family', 'Husband', 'Wife', 'Own-child', 'Unmarried', 'Other-relative']
+
 
 def run_ml_app():
-    design = """<div style="padding:15px;">
-                    <h1 style="color:#000">Income Category Prediction</h1>
-                </div
-             """
-    st.markdown(design, unsafe_allow_html=True)
-    Education_List = list(education_map.values())
-    left, right = st.columns((2,2))
-    Age = left.number_input("Age", min_value = 1, max_value = 100)
-    Education = right.selectbox("Education", Education_List)
-    Capital_Gain = left.selectbox("Capital Gain", ("Yes","No"))
-    Capital_Loss = right.selectbox("Capital Loss", ("Yes","No"))
-    Hours_per_Week = left.number_input("Hours per Week", min_value = 0, max_value = 100)
-    Work_Class = right.selectbox("Work Class", workclass)
-    Marital_Status = left.selectbox("Marital Status", ("Married","Never-married","Divorced"))
-    Occupation = right.selectbox("Occupation", occupation)
-    Relationship = left.selectbox("Relationship", [s.replace('Relationship_', '') for s in relationship])
-    Race = right.selectbox("Race", ("White","Non White"))
-    Gender = left.selectbox("Gender", ("Male","Female"))
-    Native_Country = right.selectbox("Native Country", ("United State","Non United State"))
-    Final_Weight = left.number_input("Final Weight", min_value = 12000, max_value = 1400000)
-    button = st.button("Predict")
+    """Fungsi utama untuk menjalankan antarmuka aplikasi ML."""
     
-    #If button is clilcked
-    if button:
-        result = predict(capital_gain, capital_loss, race, gender, 
-                         native_country, age, final_weight, educationnum,
-                         hours_per_week, workclass_1, workclass_2, workclass_3, 
-                         workclass_4, workclass_5, workclass_6, workclass_7,
-                         workclass_8, workclass_9, marital_1, marital_2, 
-                         marital_3, occupation_1, occupation_2, occupation_3,
-                         occupation_4, occupation_5, occupation_6, occupation_7, 
-                         occupation_8, occupation_9, occupation_10, occupation_11,
-                         occupation_12, occupation_13, occupation_14, relationship_1, 
-                         relationship_2, relationship_3, relationship_4, relationship_5)
-        
-def predict(capital_gain, capital_loss, race, gender, 
-            native_country, age, final_weight, educationnum,
-            hours_per_week, workclass_1, workclass_2, workclass_3, 
-            workclass_4, workclass_5, workclass_6, workclass_7,
-            workclass_8, workclass_9, marital_1, marital_2, 
-            marital_3, occupation_1, occupation_2, occupation_3,
-            occupation_4, occupation_5, occupation_6, occupation_7, 
-            occupation_8, occupation_9, occupation_10, occupation_11,
-            occupation_12, occupation_13, occupation_14, relationship_1, 
-            relationship_2, relationship_3, relationship_4, relationship_5):
+    st.subheader("Prediksi Kategori Pendapatan 📊")
 
-    #Preprocessing User Input
-    capital_gain = 1 if Capital_Gain == "Yes" else 0
-    capital_loss = 1 if Capital_Loss == "Yes" else 0
-    race = 1 if Race == "White" else 0
-    gender = 1 if Gender == "Male" else 0
-    education_reverse_map = {v: k for k, v in education_map.items()}
-    educationnum = education_reverse_map[Education]
-    marital_1 = 1 if Marital_Status == "Divorced" else 0         
-    marital_2 = 1 if Marital_Status == "Married" else 0
-    marital_3 = 1 if Marital_Status == "Never-married" else 0
-    for i, cat in enumerate(workclass, start=1):
-        locals()[f"workclass_{i}"] = 1 if Work_Class == cat else 0
-    for i, cat in enumerate(occupation, start=1):
-        locals()[f"occupation_{i}"] = 1 if Occupation == cat else 0
-    for i, cat in enumerate(relationship, start=1):
-        locals()[f"relationship_{i}"] = 1 if Relationship == cat else 0
-    native_country = 1 if Native_Country == "United State" else 0
+    # Layout kolom untuk input
+    left, right = st.columns(2)
+
+    # Mengumpulkan input dari pengguna
+    age = left.number_input("Usia", min_value=17, max_value=90, value=37)
+    workclass = right.selectbox("Kelas Pekerjaan", options=workclass_options)
+    final_weight = left.number_input("Final Weight", min_value=12000, max_value=1500000, value=180000)
     
-    #Making prediction
-    prediction = XGBoost_Model.predict([[capital_gain, capital_loss, race, gender, 
-            native_country, age, final_weight, educationnum,
-            hours_per_week, workclass_1, workclass_2, workclass_3, 
-            workclass_4, workclass_5, workclass_6, workclass_7,
-            workclass_8, workclass_9, marital_1, marital_2, 
-            marital_3, occupation_1, occupation_2, occupation_3,
-            occupation_4, occupation_5, occupation_6, occupation_7, 
-            occupation_8, occupation_9, occupation_10, occupation_11,
-            occupation_12, occupation_13, occupation_14, relationship_1, 
-            relationship_2, relationship_3, relationship_4, relationship_5]])
-    result = "<=50K" if prediction == 0 else ">50K"
-    return result
+    # Ambil nilai EducationNum dari input selectbox
+    education_label = right.selectbox("Pendidikan Terakhir", options=list(education_map.keys()))
+    educationnum = education_map[education_label]
+    
+    marital_status = left.selectbox("Status Pernikahan", options=["Married", "Never-married", "Divorced"])
+    occupation = right.selectbox("Pekerjaan", options=occupation_options)
+    relationship = left.selectbox("Hubungan Keluarga", options=relationship_options)
+    race = right.selectbox("Ras", options=["White", "Non-White"])
+    gender = left.selectbox("Jenis Kelamin", options=["Male", "Female"])
+    
+    # Input Capital Gain/Loss dibuat biner agar sesuai dengan data training
+    capital_gain = 1 if left.selectbox("Memiliki Capital Gain?", ("Ya", "Tidak")) == "Ya" else 0
+    capital_loss = 1 if right.selectbox("Memiliki Capital Loss?", ("Ya", "Tidak")) == "Ya" else 0
+
+    hours_per_week = left.number_input("Jam Kerja per Minggu", min_value=1, max_value=99, value=40)
+    native_country = right.selectbox("Kewarganegaraan", options=["USA", "Non-USA"])
+    
+    # Tombol untuk memicu prediksi
+    if st.button("🔮 Prediksi Sekarang"):
+        # ====================================================================
+        # 2. BUAT DATAFRAME DARI INPUT PENGGUNA
+        # Strukturnya harus sama persis dengan data mentah X_train Anda.
+        # ====================================================================
+        input_data = {
+            'Age': [age],
+            'Workclass': [workclass],
+            'Final Weight': [final_weight],
+            'EducationNum': [educationnum],
+            'Marital Status': [marital_status],
+            'Occupation': [occupation],
+            'Relationship': [relationship],
+            'Race': [race],
+            'Gender': [gender],
+            'Capital Gain': [capital_gain],
+            'capital loss': [capital_loss],
+            'Hours per Week': [hours_per_week],
+            'Native Country': [native_country]
+        }
+        input_df = pd.DataFrame(input_data)
+
+        # ====================================================================
+        # 3. LAKUKAN PREDIKSI DENGAN SATU BARIS KODE!
+        # Pipeline akan secara otomatis melakukan scaling dan encoding.
+        # ====================================================================
+        prediction = pipeline.predict(input_df)
+        prediction_proba = pipeline.predict_proba(input_df)
+
+        # Tampilkan hasilnya
+        st.success("Hasil Prediksi:")
+        result = ">50K" if prediction[0] == 1 else "<=50K"
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Prediksi Pendapatan", result)
+        with col2:
+            st.metric("Tingkat Keyakinan", f"{prediction_proba[0][prediction[0]]:.2%}")
+        
+        with st.expander("Lihat Probabilitas Detail"):
+            st.write({
+                "Probabilitas <=50K": f"{prediction_proba[0][0]:.2%}",
+                "Probabilitas >50K": f"{prediction_proba[0][1]:.2%}"
+            })
+
+def main():
+    """Fungsi navigasi utama aplikasi."""
+    stc.html("""
+        <div style="background-color:#000;padding:10px;border-radius:10px">
+            <h1 style="color:#fff;text-align:center">Aplikasi Prediksi Pendapatan</h1> 
+            <h4 style="color:#fff;text-align:center">Dibangun untuk Proyek Akhir</h4> 
+        </div>
+    """)
+    menu = ["Beranda", "Aplikasi Machine Learning"]
+    choice = st.sidebar.selectbox("Menu", menu)
+
+    if choice == "Beranda":
+        st.subheader("Selamat Datang!")
+        st.markdown("""
+            ### Aplikasi Prediksi Kategori Pendapatan
+            Aplikasi ini menggunakan model Machine Learning untuk memprediksi apakah pendapatan tahunan seseorang berada di atas atau di bawah $50.000.
+            
+            #### Sumber Data
+            Dataset yang digunakan adalah "Adult Census Income" dari UCI Machine Learning Repository.
+            
+            **Pilih "Aplikasi Machine Learning" dari menu sidebar untuk memulai.**
+        """)
+    elif choice == "Aplikasi Machine Learning":
+        run_ml_app()
 
 if __name__ == "__main__":
-
     main()
